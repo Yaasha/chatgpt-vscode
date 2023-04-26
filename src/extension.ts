@@ -5,6 +5,10 @@ import { ChatGPTAPI } from 'chatgpt';
 type AuthInfo = {apiKey?: string};
 type Settings = {selectedInsideCodeblock?: boolean, codeblockWithLanguageId?: false, pasteOnClick?: boolean, keepConversation?: boolean, timeoutLength?: number, model?: string, apiUrl?: string};
 
+interface CustomCommand {
+	label: string;
+	prompt: string;
+}
 
 const BASE_URL = 'https://api.openai.com/v1';
 
@@ -38,25 +42,36 @@ export function activate(context: vscode.ExtensionContext) {
 		})
 	);
 
-
-	const commandHandler = (command:string) => {
-		const config = vscode.workspace.getConfiguration('chatgpt');
-		const prompt = config.get(command) as string;
-		provider.search(prompt);
-	};
+	const customCommands: Array<CustomCommand> = config.get("customCommands") || [];
 
 	// Register the commands that can be called from the extension's package.json
 	context.subscriptions.push(
-		vscode.commands.registerCommand('chatgpt.ask', () => 
-			vscode.window.showInputBox({ prompt: 'What do you want to do?' })
-			.then((value) => provider.search(value))
-		),
-		vscode.commands.registerCommand('chatgpt.explain', () => commandHandler('promptPrefix.explain')),
-		vscode.commands.registerCommand('chatgpt.refactor', () => commandHandler('promptPrefix.refactor')),
-		vscode.commands.registerCommand('chatgpt.optimize', () => commandHandler('promptPrefix.optimize')),
-		vscode.commands.registerCommand('chatgpt.findProblems', () => commandHandler('promptPrefix.findProblems')),
-		vscode.commands.registerCommand('chatgpt.documentation', () => commandHandler('promptPrefix.documentation')),
-		vscode.commands.registerCommand('chatgpt.resetConversation', () => provider.resetConversation())
+		vscode.commands.registerCommand('chatgpt.resetConversation', () => provider.resetConversation()),
+		vscode.commands.registerCommand('chatgpt.customCommands', () => {
+			const quickPick = vscode.window.createQuickPick();
+			quickPick.items = customCommands;
+
+			quickPick.title = 'Select a prompt or write your own:';
+
+			quickPick.onDidChangeValue(() => {
+					// INJECT user values into proposed values
+					if (!customCommands.map(command => command.label).includes(quickPick.value)) {
+						quickPick.items = [{label: quickPick.value}, ...customCommands];
+					};
+			});
+
+			quickPick.onDidAccept(() => {
+					const selection = quickPick.activeItems[0] as CustomCommand;
+				
+					if (selection.prompt) {
+						provider.search(selection.prompt);
+					} else {
+						provider.search(selection.label);
+					}
+					quickPick.hide();
+			});
+			quickPick.show();
+		})
 	);
 
 
